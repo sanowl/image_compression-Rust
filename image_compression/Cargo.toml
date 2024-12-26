@@ -1,0 +1,13 @@
+[package]
+name = "image_compression"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clap = "4.5.23"
+config = "0.15.4"
+flate2 = "1.0.35"
+image = "0.25.5"
+lz4 = "1.28.0"
+serde = "1.0.216"
+thiserror = "2.0.9"
