@@ -17,26 +17,13 @@
 //! assert_eq!(data.to_vec(), decompressed);
 //! ```
 
-use crate::compression::Compressor;
+use crate::compression::{Compressor, CompressionError};
 use flate2::{read::DeflateDecoder, write::DeflateEncoder, Compression as Flate2Compression};
 use std::fmt;
-use std::io::{self, Read, Write};
-use thiserror::Error;
-
-/// Custom error type for compression and decompression operations.
-#[derive(Debug, Error)]
-pub enum CompressionError {
-    #[error("I/O error during compression/decompression: {0}")]
-    Io(#[from] io::Error),
-
-    #[error("Compression error: {0}")]
-    Compression(String),
-
-    #[error("Decompression error: {0}")]
-    Decompression(String),
-}
+use std::io::{ Read, Write};
 
 /// Struct representing a Deflate compressor with configurable compression levels.
+#[derive(Debug, Clone)]
 pub struct DeflateCompressor {
     level: Flate2Compression,
     level_number: u32,
@@ -45,7 +32,7 @@ pub struct DeflateCompressor {
 impl DeflateCompressor {
     /// Creates a new `DeflateCompressor` with the default compression level.
     ///
-    /// The default compression level corresponds to `Flate2Compression::default()`.
+    /// The default compression level corresponds to `Flate2Compression::fast()` (level 1).
     ///
     /// # Example
     ///
@@ -55,9 +42,10 @@ impl DeflateCompressor {
     /// let compressor = DeflateCompressor::new();
     /// ```
     pub fn new() -> Self {
+        let default_level = Flate2Compression::fast();
         DeflateCompressor {
-            level: Flate2Compression::default(),
-            level_number: 6, // Default compression level
+            level: default_level.clone(),
+            level_number: default_level.level(),
         }
     }
 
@@ -65,7 +53,7 @@ impl DeflateCompressor {
     ///
     /// # Arguments
     ///
-    /// * `level` - The compression level to use.
+    /// * `level` - The compression level to use (`Flate2Compression::fast()`, `Flate2Compression::best()`, or `Flate2Compression::new(u32)`).
     ///
     /// # Example
     ///
@@ -76,16 +64,50 @@ impl DeflateCompressor {
     /// let compressor = DeflateCompressor::with_level(Compression::new(9));
     /// ```
     pub fn with_level(level: Flate2Compression) -> Self {
-        let level_number = match level {
-            Flate2Compression::Fastest => 1,
-            Flate2Compression::Default => 6,
-            Flate2Compression::Best => 9,
-            Flate2Compression::new(n) => n,
-        };
         DeflateCompressor {
+            level: level.clone(),
+            level_number: level.level(),
+        }
+    }
+
+    /// Creates a new `DeflateCompressor` using predefined level names.
+    ///
+    /// Supported levels:
+    /// - "fastest" -> `Flate2Compression::fast()` (level 1)
+    /// - "default" -> `Flate2Compression::new(6)` (level 6)
+    /// - "best" -> `Flate2Compression::best()` (level 9)
+    ///
+    /// # Arguments
+    ///
+    /// * `level` - A string slice representing the desired compression level ("fastest", "default", "best").
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use image_compression::compression::deflate::DeflateCompressor;
+    ///
+    /// let compressor = DeflateCompressor::with_predefined_level("best").unwrap();
+    /// ```
+    pub fn with_predefined_level(level: &str) -> Result<Self, CompressionError> {
+        let (compression, level_number) = match level.to_lowercase().as_str() {
+            "fastest" => (Flate2Compression::fast(), 1),
+            "default" => (Flate2Compression::new(6), 6),
+            "best" => (Flate2Compression::best(), 9),
+            _ => return Err(CompressionError::InvalidLevel(level.to_string())),
+        };
+        Ok(DeflateCompressor {
             level,
             level_number,
-        }
+        })
+    }
+
+    /// Retrieves the compression level number.
+    ///
+    /// # Returns
+    ///
+    /// The compression level as a `u32`.
+    pub fn get_level(&self) -> u32 {
+        self.level_number
     }
 }
 
@@ -114,7 +136,7 @@ impl Compressor for DeflateCompressor {
     /// ```
     fn compress(&self, data: &[u8]) -> Result<Vec<u8>, CompressionError> {
         let mut encoder = DeflateEncoder::new(Vec::new(), self.level);
-        encoder.write_all(data)?;
+        encoder.write_all(data).map_err(|e| CompressionError::Compression(e.to_string()))?;
         encoder.finish().map_err(|e| CompressionError::Compression(e.to_string()))
     }
 
@@ -145,7 +167,7 @@ impl Compressor for DeflateCompressor {
     fn decompress(&self, data: &[u8]) -> Result<Vec<u8>, CompressionError> {
         let mut decoder = DeflateDecoder::new(data);
         let mut decompressed = Vec::new();
-        decoder.read_to_end(&mut decompressed)?;
+        decoder.read_to_end(&mut decompressed).map_err(|e| CompressionError::Decompression(e.to_string()))?;
         Ok(decompressed)
     }
 }
@@ -173,15 +195,27 @@ mod tests {
         let compressed = compressor.compress(data).unwrap();
         let decompressed = compressor.decompress(&compressed).unwrap();
         assert_eq!(data.to_vec(), decompressed);
+        assert_eq!(compressor.get_level(), 1);
     }
 
     #[test]
     fn test_deflate_compressor_custom_level() {
-        let compressor = DeflateCompressor::with_level(Compression::new(9));
+        let compressor = DeflateCompressor::with_level(Compression::new(7));
         let data = b"Test data for custom compression level.";
         let compressed = compressor.compress(data).unwrap();
         let decompressed = compressor.decompress(&compressed).unwrap();
         assert_eq!(data.to_vec(), decompressed);
+        assert_eq!(compressor.get_level(), 7);
+    }
+
+    #[test]
+    fn test_deflate_compressor_predefined_level() {
+        let compressor = DeflateCompressor::with_predefined_level("best").unwrap();
+        let data = b"Test data for predefined compression level.";
+        let compressed = compressor.compress(data).unwrap();
+        let decompressed = compressor.decompress(&compressed).unwrap();
+        assert_eq!(data.to_vec(), decompressed);
+        assert_eq!(compressor.get_level(), 9);
     }
 
     #[test]
@@ -199,5 +233,16 @@ mod tests {
         let invalid_data = b"Invalid compressed data";
         let result = compressor.decompress(invalid_data);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_deflate_compressor_invalid_level() {
+        let result = DeflateCompressor::with_predefined_level("superfast");
+        assert!(result.is_err());
+        if let Err(CompressionError::InvalidLevel(level)) = result {
+            assert_eq!(level, "superfast");
+        } else {
+            panic!("Expected InvalidLevel error");
+        }
     }
 }

@@ -11,3 +11,7 @@ image = "0.25.5"
 lz4 = "1.28.0"
 serde = "1.0.216"
 thiserror = "2.0.9"
+
+
+log = "0.4"
+tempfile = "3.3" # For testing purposes

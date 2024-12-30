@@ -22,7 +22,7 @@ impl Compressor for LZWCompressor {
 
         let mut w: Vec<u8> = Vec::new();
         let mut result: Vec<u8> = Vec::new();
-        let mut next_code = 256;
+        let mut next_code = 256 ;
 
         for &k in data {
             let mut wk = w.clone();
