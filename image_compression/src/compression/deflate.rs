@@ -17,10 +17,10 @@
 //! assert_eq!(data.to_vec(), decompressed);
 //! ```
 
-use crate::compression::{Compressor, CompressionError};
+use super::{Compressor, CompressionError};
 use flate2::{read::DeflateDecoder, write::DeflateEncoder, Compression as Flate2Compression};
 use std::fmt;
-use std::io::{ Read, Write};
+use std::io::{Read, Write};
 
 /// Struct representing a Deflate compressor with configurable compression levels.
 #[derive(Debug, Clone)]
@@ -96,8 +96,35 @@ impl DeflateCompressor {
             _ => return Err(CompressionError::InvalidLevel(level.to_string())),
         };
         Ok(DeflateCompressor {
-            level,
+            level: compression,
             level_number,
+        })
+    }
+
+    /// Creates a new `DeflateCompressor` with a specified compression level number.
+    ///
+    /// # Arguments
+    ///
+    /// * `level` - The compression level number to use (0-9).
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing the `DeflateCompressor` or a `CompressionError` if the level is invalid.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use image_compression::compression::deflate::DeflateCompressor;
+    ///
+    /// let compressor = DeflateCompressor::with_level_number(7).unwrap();
+    /// ```
+    pub fn with_level_number(level: u32) -> Result<Self, CompressionError> {
+        if level > 9 {
+            return Err(CompressionError::InvalidLevel(format!("{}", level)));
+        }
+        Ok(DeflateCompressor {
+            level: Flate2Compression::new(level),
+            level_number: level,
         })
     }
 
@@ -167,7 +194,8 @@ impl Compressor for DeflateCompressor {
     fn decompress(&self, data: &[u8]) -> Result<Vec<u8>, CompressionError> {
         let mut decoder = DeflateDecoder::new(data);
         let mut decompressed = Vec::new();
-        decoder.read_to_end(&mut decompressed).map_err(|e| CompressionError::Decompression(e.to_string()))?;
+        decoder.read_to_end(&mut decompressed)
+            .map_err(|e| CompressionError::Decompression(e.to_string()))?;
         Ok(decompressed)
     }
 }
@@ -200,7 +228,7 @@ mod tests {
 
     #[test]
     fn test_deflate_compressor_custom_level() {
-        let compressor = DeflateCompressor::with_level(Compression::new(7));
+        let compressor = DeflateCompressor::with_level_number(7).unwrap();
         let data = b"Test data for custom compression level.";
         let compressed = compressor.compress(data).unwrap();
         let decompressed = compressor.decompress(&compressed).unwrap();

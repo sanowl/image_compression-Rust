@@ -9,10 +9,10 @@ pub enum CompressionError {
     InvalidLevel(String),
 
     #[error("Compression failed: {0}")]
-    CompressionFailed(String),
+    Compression(String),
 
     #[error("Decompression failed: {0}")]
-    DecompressionFailed(String),
+    Decompression(String),
 
     #[error("Unknown compression algorithm: {0}")]
     UnknownAlgorithm(String),
@@ -45,8 +45,8 @@ pub trait Compressor {
     fn decompress(&self, data: &[u8]) -> Result<Vec<u8>, CompressionError>;
 }
 
-pub mod lzw;
 pub mod deflate;
+pub mod lzw;
 pub mod utils;
 
 /// Enum representing the supported compression algorithms.
@@ -57,20 +57,23 @@ pub enum CompressionAlgorithmType {
 }
 
 impl CompressionAlgorithmType {
-    /// Factory method to create a compressor based on the configuration.
+    /// Factory method to create a compressor based on the algorithm name and level.
     ///
     /// # Arguments
     ///
-    /// * `config` - A reference to the application's configuration.
+    /// * `algorithm` - The name of the compression algorithm ("deflate", "lzw", etc.).
+    /// * `level` - Optional compression level number (0-9). Applicable for algorithms that support levels.
     ///
     /// # Returns
     ///
     /// A `Result` containing the appropriate `CompressionAlgorithmType` or a `CompressionError`.
-    pub fn new(config: &crate::config::AppConfig) -> Result<Self, CompressionError> {
-        match config.compression_algorithm.as_str() {
+    pub fn create(algorithm: &str, level: Option<u32>) -> Result<Self, CompressionError> {
+        match algorithm.to_lowercase().as_str() {
             "deflate" => {
-                let level = config.compression_level.unwrap_or(6);
-                let compressor = deflate::DeflateCompressor::new(level)?;
+                let compressor = match level {
+                    Some(lvl) => deflate::DeflateCompressor::with_level_number(lvl)?,
+                    None => deflate::DeflateCompressor::new(),
+                };
                 Ok(CompressionAlgorithmType::Deflate(compressor))
             },
             "lzw" => {
