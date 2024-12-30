@@ -56,17 +56,9 @@ pub enum CompressionAlgorithmType {
     // Add other algorithms as needed
 }
 
+// src/compression/mod.rs
+
 impl CompressionAlgorithmType {
-    /// Factory method to create a compressor based on the algorithm name and level.
-    ///
-    /// # Arguments
-    ///
-    /// * `algorithm` - The name of the compression algorithm ("deflate", "lzw", etc.).
-    /// * `level` - Optional compression level number (0-9). Applicable for algorithms that support levels.
-    ///
-    /// # Returns
-    ///
-    /// A `Result` containing the appropriate `CompressionAlgorithmType` or a `CompressionError`.
     pub fn create(algorithm: &str, level: Option<u32>) -> Result<Self, CompressionError> {
         match algorithm.to_lowercase().as_str() {
             "deflate" => {
@@ -77,13 +69,14 @@ impl CompressionAlgorithmType {
                 Ok(CompressionAlgorithmType::Deflate(compressor))
             },
             "lzw" => {
-                let compressor = lzw::LzwCompressor::new();
+                let compressor = lzw::LzwCompressor::new(4096); // Provide the required usize argument
                 Ok(CompressionAlgorithmType::Lzw(compressor))
             },
             other => Err(CompressionError::UnknownAlgorithm(other.to_string())),
         }
     }
 }
+
 
 impl Compressor for CompressionAlgorithmType {
     fn compress(&self, data: &[u8]) -> Result<Vec<u8>, CompressionError> {
